@@ -40,6 +40,7 @@ namespace WheresMyImplant
 
             ////////////////////////////////////////////////////////////////////////////////
             IntPtr hModule = kernel32.GetModuleHandle("kernel32.dll");
+            WriteOutput(hModule.ToString());
             if (IntPtr.Zero == hModule)
             {
                 WriteOutputBad("Unable to open module handle to kernel32.dll");
