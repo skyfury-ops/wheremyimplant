@@ -1,15 +1,13 @@
 ﻿using System;
-using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace WheresMyImplant
 {
-    class SMBClient : Base, IDisposable
+    class SMBClient : SMB
     {
         Byte[] flags;
         UInt32 messageId = 0x1;
@@ -21,11 +19,8 @@ namespace WheresMyImplant
         Byte[] sessionKey;
 
         String version;//= "SMB2";
-        String system;
 
         Byte[] processId;
-        TcpClient smbClient;
-        NetworkStream streamSocket;
 
         Byte[] guidFileHandle = new Byte[16];
 
@@ -40,31 +35,6 @@ namespace WheresMyImplant
             Int32 dwProcessId = Process.GetCurrentProcess().Id;
             String strProcessId = BitConverter.ToString(BitConverter.GetBytes(dwProcessId));
             processId = strProcessId.Split('-').Select(i => (Byte)Convert.ToInt16(i,16)).ToArray();
-        }
-
-        ////////////////////////////////////////////////////////////////////////////////
-        // Create Network Layer Connection
-        ////////////////////////////////////////////////////////////////////////////////
-        public Boolean Connect(String system)
-        {
-            this.system = system;
-            smbClient.Client.ReceiveTimeout = 30000;
-
-            try
-            {
-                smbClient.Connect(system, 445);
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-
-            if (!smbClient.Connected)
-            {
-                return false;
-            }
-            streamSocket = smbClient.GetStream();
-            return true;
         }
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -327,16 +297,10 @@ namespace WheresMyImplant
             streamSocket.Flush();
             streamSocket.Read(recieve, 0, recieve.Length);
 
-            Byte[] status = recieve.Skip(12).Take(4).ToArray();
-            if (status.SequenceEqual(new Byte[] { 0x00, 0x00, 0x00, 0x00 }))
-            {
-                WriteOutputGood(String.Format("{0} Login Successful to {1}", username, system));
+            if (GetStatus(recieve.Skip(12).Take(4).ToArray()))
                 return true;
-            }
-
-            WriteOutput(String.Format("[-] {0} Login Failed to {1}", username, system));
-            WriteOutput(String.Format("[-] Status: {0}", BitConverter.ToString(status)));
-            return false;
+            else
+                return false;
         }
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -373,27 +337,10 @@ namespace WheresMyImplant
             streamSocket.Flush();
             streamSocket.Read(recieve, 0, recieve.Length);
 
-            Byte[] status = recieve.Skip(12).Take(4).ToArray();
-            if (status.SequenceEqual(new Byte[] { 0x00, 0x00, 0x00, 0x00 }))
-            {
-                WriteOutputGood(String.Format("Share Connect Successful: {0}", share));
+            if (GetStatus(recieve.Skip(12).Take(4).ToArray()))
                 return true;
-            }
-            else if (status.SequenceEqual(new Byte[] { 0xcc, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] Share Not Found");
-                return false;
-            }
-            else if (status.SequenceEqual(new Byte[] { 0x22, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] Access Denied");
-                return false;
-            }
             else
-            {
-                WriteOutput(String.Format("[-] {0}", BitConverter.ToString(status)));
                 return false;
-            }
         }
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -470,26 +417,14 @@ namespace WheresMyImplant
             streamSocket.Flush();
             streamSocket.Read(recieve, 0, recieve.Length);
 
-            Byte[] status = recieve.Skip(12).Take(4).ToArray();
-            if (status.SequenceEqual(new Byte[] { 0x00, 0x00, 0x00, 0x00 }))
-            {
-                WriteOutputGood("Create Request Successful");
+            Boolean result = GetStatus(recieve.Skip(12).Take(4).ToArray());
+            if (result)
+            { 
                 guidFileHandle = recieve.Skip(0x0084).Take(16).ToArray();
                 return true;
             }
-            else if (status.SequenceEqual(new Byte[] { 0x34, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] File Not Found");
-                return false;
-            }
-            else if (status.SequenceEqual(new Byte[] { 0x22, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] Access Denied");
-                return false;
-            }
             else
             {
-                WriteOutput(String.Format("[-] {0}", BitConverter.ToString(status)));
                 return false;
             }
         }
@@ -531,27 +466,10 @@ namespace WheresMyImplant
             streamSocket.Flush();
             streamSocket.Read(recieve, 0, recieve.Length);
 
-            Byte[] status = recieve.Skip(12).Take(4).ToArray();
-            if (status.SequenceEqual(new Byte[] { 0x00, 0x00, 0x00, 0x00 }))
-            {
-                WriteOutputGood("Info Request Successful");
+            if (GetStatus(recieve.Skip(12).Take(4).ToArray()))
                 return true;
-            }
-            else if (status.SequenceEqual(new Byte[] { 0x34, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] File Not Found");
-                return false;
-            }
-            else if (status.SequenceEqual(new Byte[] { 0x22, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] Access Denied");
-                return false;
-            }
             else
-            {
-                WriteOutput(String.Format("[-] {0}", BitConverter.ToString(status)));
                 return false;
-            }
         }
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -653,27 +571,10 @@ namespace WheresMyImplant
             streamSocket.Flush();
             streamSocket.Read(recieve, 0, recieve.Length);
 
-            Byte[] status = recieve.Skip(12).Take(4).ToArray();
-            if (status.SequenceEqual(new Byte[] { 0x00, 0x00, 0x00, 0x00 }))
-            {
-                WriteOutputGood("Find Request Successful");
+            if (GetStatus(recieve.Skip(12).Take(4).ToArray()))
                 return true;
-            }
-            else if (status.SequenceEqual(new Byte[] { 0x34, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] File Not Found");
-                return false;
-            }
-            else if (status.SequenceEqual(new Byte[] { 0x22, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] Access Denied");
-                return false;
-            }
             else
-            {
-                WriteOutput(String.Format("[-] {0}", BitConverter.ToString(status)));
                 return false;
-            }
         }
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -757,27 +658,10 @@ namespace WheresMyImplant
             streamSocket.Flush();
             streamSocket.Read(recieve, 0, recieve.Length);
 
-            Byte[] status = recieve.Skip(12).Take(4).ToArray();
-            if (status.SequenceEqual(new Byte[] { 0x00, 0x00, 0x00, 0x00 }))
-            {
-                WriteOutputGood("Close Request Successful");
+            if (GetStatus(recieve.Skip(12).Take(4).ToArray()))
                 return true;
-            }
-            else if (status.SequenceEqual(new Byte[] { 0x34, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] File Not Found");
-                return false;
-            }
-            else if (status.SequenceEqual(new Byte[] { 0x22, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] Access Denied");
-                return false;
-            }
             else
-            {
-                WriteOutput(String.Format("[-] {0}", BitConverter.ToString(status)));
                 return false;
-            }
         }
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -817,42 +701,11 @@ namespace WheresMyImplant
             streamSocket.Flush();
             streamSocket.Read(recieve, 0, recieve.Length);
 
-            Byte[] status = recieve.Skip(12).Take(4).ToArray();
-            if (status.SequenceEqual(new Byte[] { 0x00, 0x00, 0x00, 0x00 }))
-            {
-                WriteOutputGood("Disconnect Request Successful");
+            if (GetStatus(recieve.Skip(12).Take(4).ToArray()))
                 return true;
-            }
-            else if (status.SequenceEqual(new Byte[] { 0x34, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] File Not Found");
-                return false;
-            }
-            else if (status.SequenceEqual(new Byte[] { 0x22, 0x00, 0x00, 0xc0 }))
-            {
-                WriteOutput("[-] Access Denied");
-                return false;
-            }
             else
-            {
-                WriteOutput(String.Format("[-] {0}", BitConverter.ToString(status)));
                 return false;
-            }
         }
-
-        ////////////////////////////////////////////////////////////////////////////////
-        //
-        ////////////////////////////////////////////////////////////////////////////////
-        public void Dispose()
-        {
-            streamSocket.Dispose();
-
-            if (smbClient.Connected)
-            {
-                smbClient.Close();
-            }
-        }
-
 
         ~SMBClient()
         {
