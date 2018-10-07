@@ -67,7 +67,7 @@ namespace WheresMyImplant
             streamSocket.Flush();
             streamSocket.Read(recieve, 0, recieve.Length);
 
-            if (GetStatus(recieve.Skip(12).Take(4).ToArray()))
+            if (!GetStatus(recieve.Skip(12).Take(4).ToArray()))
             {
                 guidFileHandle = recieve.Skip(0x0084).Take(16).ToArray();
                 return true;
